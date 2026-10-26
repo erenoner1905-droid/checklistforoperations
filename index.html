@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Harekat Operasyon & Admin Sistemi</title>
+  <!-- Gerçek Zamanlı Çoklu Cihaz Senkronizasyonu İçin MQTT Kütüphanesi -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #1e293b;
+      --card-done: #112233;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --quote-bg: #0f172a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding-bottom: 80px; -webkit-tap-highlight-color: transparent; }
+
+    /* GİRİŞ MODALI */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(11, 17, 32, 0.96); backdrop-filter: blur(10px); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 14px; overflow-y: auto; }
+    .modal-card { background: var(--card); border: 2px solid var(--accent); border-radius: 14px; width: 100%; max-width: 460px; padding: 18px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
+    .modal-title { font-size: 1.15rem; font-weight: 800; color: var(--accent); margin-bottom: 4px; text-align: center; text-transform: uppercase; }
+    .modal-sub { font-size: 0.8rem; color: var(--muted); text-align: center; margin-bottom: 14px; }
+    .role-tabs { display: flex; gap: 6px; margin-bottom: 14px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+    .role-tab { flex: 1; padding: 9px; border: none; background: transparent; color: var(--muted); font-weight: 800; font-size: 0.82rem; border-radius: 6px; cursor: pointer; }
+    .role-tab.active { background: var(--accent); color: #000; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.76rem; color: #cbd5e1; font-weight: 700; margin-bottom: 5px; }
+    .form-group input { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 0.92rem; font-weight: 600; }
+    .airline-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .airline-option { padding: 12px 6px; background: var(--bg); border: 2px solid var(--border); color: var(--muted); border-radius: 10px; text-align: center; font-weight: 800; font-size: 0.82rem; cursor: pointer; transition: 0.2s; }
+    .airline-option.selected { border-color: var(--accent); background: rgba(56, 189, 248, 0.16); color: var(--text); }
+    .start-btn { width: 100%; padding: 13px; background: var(--success); color: #000; border: none; border-radius: 9px; font-weight: 800; font-size: 0.95rem; cursor: pointer; margin-top: 6px; }
+
+    /* ÜST SABİT BAR */
+    .sticky-top { position: sticky; top: 0; z-index: 100; background: rgba(11, 17, 32, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 10px 12px; }
+    .officer-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.76rem; gap: 6px; flex-wrap: wrap; }
+    .officer-badge { background: rgba(56, 189, 248, 0.15); border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+    .sync-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 4px; }
+    .sync-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .progress-bar { width: 100%; height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+    .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s ease; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.79rem; color: var(--muted); }
+    .nav-tabs { display: flex; gap: 6px; }
+    .nav-btn { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 6px; font-weight: 700; font-size: 0.77rem; cursor: pointer; }
+    .nav-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    .container { padding: 12px; max-width: 900px; margin: 0 auto; }
+
+    /* HAVAYOLU AÇIKLAMA KARTI & KİRALIK UYARISI */
+    .airline-brief-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-left: 4px solid var(--accent); border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; font-size: 0.82rem; line-height: 1.45; }
+    .airline-brief-card strong { color: var(--accent); display: block; margin-bottom: 4px; font-size: 0.88rem; text-transform: uppercase; }
+    .lease-alert { background: rgba(239, 68, 68, 0.16); border: 2px solid var(--danger); color: #fecaca; border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; font-size: 0.82rem; line-height: 1.4; font-weight: 600; display: none; }
+    .lease-ok { background: rgba(34, 197, 94, 0.14); border: 1px solid var(--success); color: #bbf7d0; border-radius: 9px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.8rem; font-weight: 600; display: none; }
+
+    /* UÇUŞ BİLGİLERİ KARTI (4 ALAN) */
+    .flight-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .flight-card label { display: block; font-size: 0.7rem; color: var(--muted); margin-bottom: 3px; font-weight: 600; }
+    .flight-card input { width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-weight: 700; text-transform: uppercase; font-size: 0.88rem; }
+
+    /* ADIM KARTLARI */
+    .step-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; transition: border-color 0.2s; }
+    .step-card.completed { border-color: rgba(34, 197, 94, 0.45); background: var(--card-done); }
+    .step-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .step-num { background: var(--accent); color: #000; font-weight: 800; font-size: 0.78rem; padding: 2px 7px; border-radius: 5px; flex-shrink: 0; margin-top: 2px; }
+    .step-card.completed .step-num { background: var(--success); color: #000; }
+    .step-title { font-size: 0.92rem; font-weight: 600; line-height: 1.35; }
+
+    .script-box { background: var(--quote-bg); border-left: 3px solid var(--warn); padding: 8px 10px; border-radius: 6px; margin: 6px 0; font-size: 0.83rem; line-height: 1.4; color: #fde68a; }
+    .script-box strong { color: #fff; }
+
+    .sub-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .sub-item { display: flex; align-items: center; justify-content: space-between; background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 7px; border: 1px solid rgba(51, 65, 85, 0.65); gap: 8px; flex-wrap: wrap; }
+    .sub-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 180px; cursor: pointer; }
+    .sub-left input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--success); flex-shrink: 0; cursor: pointer; }
+    .sub-label { font-size: 0.86rem; line-height: 1.3; }
+    .sub-item.checked .sub-label { text-decoration: line-through; color: var(--muted); }
+
+    .time-input { background: var(--bg); border: 1px solid var(--accent); color: var(--accent); padding: 5px 6px; border-radius: 6px; font-weight: 700; font-size: 0.84rem; width: 92px; text-align: center; flex-shrink: 0; }
+    .inline-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 6px; font-size: 0.85rem; width: 130px; text-align: right; font-weight: 600; }
+    .calc-badge { background: rgba(56, 189, 248, 0.15); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.78rem; margin-left: 4px; display: inline-block; }
+
+    /* GÖVDE TİPİ SEÇİCİ (4. ADIM) */
+    .body-type-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
+    .body-btn { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); border-radius: 7px; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
+    .body-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    /* 29. ADIM: 5 AMBAR BAĞIMSIZ BULK / AKE YÜKLEME TABLOSU */
+    .loading-panel { background: linear-gradient(180deg, #172554 0%, #1e293b 100%); border: 2px solid var(--accent); border-radius: 12px; padding: 12px; margin: 14px 0; }
+    .loading-panel-title { font-size: 0.92rem; font-weight: 800; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; display: block; }
+    .ambar-box { background: rgba(11, 17, 32, 0.85); border: 1px solid var(--border); border-radius: 9px; padding: 10px; margin-bottom: 10px; }
+    .ambar-box.match-ok { border-color: var(--success); }
+    .ambar-box.match-diff { border-color: var(--warn); }
+    .ambar-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; }
+    .ambar-title { font-weight: 800; color: var(--accent); font-size: 0.9rem; }
+    .cpt-mode-toggle { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .cpt-mode-btn { padding: 5px 10px; border: none; background: transparent; color: var(--muted); font-size: 0.74rem; font-weight: 800; cursor: pointer; }
+    .cpt-mode-btn.active-bulk { background: var(--accent); color: #000; }
+    .cpt-mode-btn.active-ake { background: var(--warn); color: #000; }
+    .status-pill { font-size: 0.71rem; font-weight: 700; padding: 2px 7px; border-radius: 12px; background: #1e293b; color: var(--muted); }
+    .status-pill.ok { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+    .status-pill.diff { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+
+    .ambar-nums-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+    .ambar-nums-grid.ake-grid { grid-template-columns: repeat(4, 1fr); }
+    .num-field label { display: block; font-size: 0.65rem; color: var(--muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .num-field input { width: 100%; padding: 7px 5px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-weight: 700; font-size: 0.86rem; text-align: right; }
+    .ambar-text-row label { display: block; font-size: 0.72rem; color: #cbd5e1; margin-bottom: 3px; font-weight: 600; }
+    .ambar-text-row input { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 0.85rem; }
+
+    .loading-totals-card { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 10px; margin-top: 8px; }
+    .totals-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px; }
+    .tot-item { background: rgba(30, 41, 59, 0.7); border: 1px solid var(--border); border-radius: 7px; padding: 8px; }
+    .tot-item span { display: block; font-size: 0.68rem; color: var(--muted); margin-bottom: 2px; }
+    .tot-item strong { font-size: 0.88rem; }
+    .tot-item.bulk-tot strong { color: var(--accent); }
+    .tot-item.ake-tot strong { color: var(--warn); }
+    .grand-total-bar { border-top: 1px solid var(--border); padding-top: 8px; display: flex; justify-content: space-between; font-size: 0.83rem; font-weight: 800; color: var(--success); }
+
+    /* ADMIN CANLI İZLEME PANELİ */
+    .admin-header { background: var(--card); border: 1px solid var(--accent); border-radius: 10px; padding: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }
+    .stat-card span { display: block; font-size: 0.72rem; color: var(--muted); }
+    .stat-card strong { font-size: 1.2rem; color: var(--accent); }
+    .ops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .op-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .op-card-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .op-airline-tag { background: var(--accent); color: #000; font-weight: 800; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; }
+    .op-meta { font-size: 0.8rem; color: #cbd5e1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+    .op-times { background: var(--bg); padding: 8px; border-radius: 6px; font-size: 0.76rem; line-height: 1.45; color: var(--muted); max-height: 130px; overflow-y: auto; }
+    .op-times strong { color: var(--text); }
+    .op-actions { display: flex; gap: 6px; margin-top: auto; }
+    .op-btn { flex: 1; padding: 7px; border: none; border-radius: 6px; font-weight: 700; font-size: 0.76rem; cursor: pointer; }
+
+    /* ALT AKSİYON BUTONLARI */
+    .bottom-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; }
+    .btn-copy { background: var(--accent); color: #000; }
+    .btn-reset { background: var(--danger); color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- GİRİŞ MODALI (HAREKAT MEMURU VEYA ADMIN) -->
+  <div class="modal-overlay" id="setupModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-title">✈️ Harekat Operasyon Sistemi</div>
+      <div class="modal-sub">Görevli Girişi veya Canlı Admin İzleme Ekranı</div>
+
+      <div class="role-tabs">
+        <button type="button" class="role-tab active" id="tabRoleOfficer" onclick="switchRoleTab('officer')">👷 Harekat Memuru</button>
+        <button type="button" class="role-tab" id="tabRoleAdmin" onclick="switchRoleTab('admin')">🖥️ Admin İzleme Paneli</button>
+      </div>
+
+      <!-- MEMUR FORMU -->
+      <div id="officerFormSection">
+        <div class="form-group">
+          <label>Harekat Memuru Adı Soyadı</label>
+          <input type="text" id="inputOfficerName" placeholder="Örn: Turgut Eren Öner">
+        </div>
+
+        <div class="form-group">
+          <label>Operasyon Yapılacak Havayolu (3 Havayolundan Seçin)</label>
+          <div class="airline-grid" id="airlineSelectorGrid"></div>
+        </div>
+      </div>
+
+      <!-- ADMIN FORMU -->
+      <div id="adminFormSection" style="display:none;">
+        <div class="form-group">
+          <label>Admin Giriş Şifresi (Varsayılan: 1234)</label>
+          <input type="password" id="inputAdminPin" placeholder="Şifre girin (1234)" value="1234">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Canlı Senkronizasyon İstasyon Kodu (Tüm Ekip Aynı Kodu Kullanır)</label>
+        <input type="text" id="inputRoomCode" value="CELEBI-LTFM-OPS">
+      </div>
+
+      <button type="button" class="start-btn" onclick="confirmSetup()">Sisteme Giriş Yap</button>
+    </div>
+  </div>
+
+  <!-- ADMIN DETAY İZLEME MODALI -->
+  <div class="modal-overlay" id="adminDetailModal" style="display:none;">
+    <div class="modal-card" style="max-width: 620px; max-height: 90vh; overflow-y: auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div class="modal-title" id="adminDetailTitle" style="margin:0;">Operasyon Detayı</div>
+        <button onclick="closeAdminDetail()" style="background:var(--danger); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:700; cursor:pointer;">Kapat</button>
+      </div>
+      <pre id="adminDetailContent" style="white-space:pre-wrap; font-size:0.8rem; background:var(--bg); padding:12px; border-radius:8px; border:1px solid var(--border); line-height:1.45; color:var(--text);"></pre>
+    </div>
+  </div>
+
+  <!-- ÜST SABİT PANEL -->
+  <div class="sticky-top">
+    <div class="officer-bar">
+      <span class="officer-badge" id="officerBadge" onclick="openSetupModal()">👤 Giriş Yap / Değiştir</span>
+      <span><span class="sync-dot" id="syncDot"></span><span id="syncText" style="color:var(--muted);">Canlı Bağlantı...</span></span>
+    </div>
+
+    <div id="officerHeaderControls">
+      <div class="top-bar">
+        <span id="progressText">İlerleme: 0 / 43 Adım</span>
+        <span id="flightSummaryBadge">Uçuş Bilgisi Girilmedi</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="nav-tabs">
+        <button class="nav-btn active" id="btnTabChecklist" onclick="switchView('checklist')">📋 Checklist</button>
+        <button class="nav-btn" onclick="jumpToLoadingTable()">📤 Ambar Yükleme (29)</button>
+        <button class="nav-btn" id="btnTabAdminQuick" onclick="switchRoleToAdminQuick()">🖥️ Canlı Ekip (Admin)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANA İÇERİK -->
+  <div class="container">
+
+    <!-- BÖLÜM 1: HAREKAT MEMURU OPERASYON EKRANI -->
+    <div id="officerWorkspace">
+      <!-- HAVAYOLU ÖZEL AÇIKLAMA BANNERI -->
+      <div class="airline-brief-card" id="airlineBriefBanner"></div>
+
+      <!-- ALGERIE 7T KİRALIK UÇAK UYARISI -->
+      <div class="lease-alert" id="algerieLeaseAlert">
+        ⚠️ <strong>KİRALIK UÇAK TESPİT EDİLDİ (Kuyruk 7T ile başlamıyor!):</strong><br>
+        • Kaptan kendi yükleme yapsın diye yanına <strong>BÜYÜK Trip Info</strong> al.<br>
+        • Geliş LIR yoksa <strong>LDM’e göre LIR hazırla</strong>.<br>
+        • Kiralıklarda <strong>TK Teknik ARANMAZ!</strong><br>
+        • <strong>LDM ve MVT depart MANUEL</strong> çekilir. (FM ve CM’den depart edilir.)
+      </div>
+      <div class="lease-ok" id="algerieOwnOk">
+        ✅ <strong>7T Kuyruk (Air Algérie Kendi Uçağı):</strong> Standart prosedür, FM ve CM’den depart edilir.
+      </div>
+
+      <!-- 4'LÜ UÇUŞ BİLGİ KARTI -->
+      <div class="flight-card">
+        <div>
+          <label>Uçak Modeli</label>
+          <input type="text" id="acModel" placeholder="B738 / A332" oninput="saveHeader()">
+        </div>
+        <div>
+          <label id="lblFlightNo">Uçuş Numarası</label>
+          <input type="text" id="flightNo" placeholder="AH / IA / XY..." oninput="saveHeader()">
+        </div>
+        <div>
+          <label>Uçağın Kuyruğu (Reg)</label>
+          <input type="text" id="acReg" placeholder="7T-... / YI-... / HZ-..." oninput="saveHeader()">
+        </div>
+        <div>
+          <label>Uçak Pozisyonu (Park)</label>
+          <input type="text" id="standNo" placeholder="Pozisyon gir" oninput="saveHeader()">
+        </div>
+      </div>
+
+      <!-- ADIMLAR LİSTESİ -->
+      <div id="stepsContainer"></div>
+
+      <div class="bottom-actions">
+        <button class="btn btn-copy" onclick="copyTurnaroundSummary()">📋 Mesajları & Ambarları Kopyala</button>
+        <button class="btn btn-reset" onclick="resetCurrentOperation()">🔄 Yeni Operasyon (Sıfırla)</button>
+      </div>
+    </div>
+
+    <!-- BÖLÜM 2: ADMIN CANLI İZLEME PANELİ -->
+    <div id="adminWorkspace" style="display:none;">
+      <div class="admin-header">
+        <div>
+          <h2 style="font-size:1.05rem; color:var(--accent);">🖥️ ADMIN CANLI OPERASYON İZLEME PANELİ</h2>
+          <p style="font-size:0.78rem; color:var(--muted);">Tüm harekat memurlarının anlık checklist, saat ve ambar yükleme hareketleri</p>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button onclick="switchBackToOfficer()" style="background:var(--accent); color:#000; border:none; padding:8px 12px; border-radius:6px; font-weight:800; font-size:0.78rem; cursor:pointer;">👷 Memur Ekranına Dön</button>
+        </div>
+      </div>
+
+      <div class="admin-stats">
+        <div class="stat-card"><span>Aktif Operasyon</span><strong id="statActiveOps">0</strong></div>
+        <div class="stat-card"><span>Ortalama İlerleme</span><strong id="statAvgProg">%0</strong></div>
+        <div class="stat-card"><span>Toplam Yüklenen BULK</span><strong id="statTotalBulk">0 Adet</strong></div>
+        <div class="stat-card"><span>Toplam Yüklenen AKE</span><strong id="statTotalAke">0 AKE</strong></div>
+      </div>
+
+      <div class="ops-grid" id="adminOpsGrid"></div>
+    </div>
+
+  </div>
+
+<script>
+  /* =========================================================================
+     3 HAVAYOLU BİREBİR ADIMLAR VE ÖZEL KURALLAR (ALGERIE, IRAQI, FLYNAS)
+     ========================================================================= */
+  const AIRLINES = {
+    ALGERIE: {
+      code: "ALGERIE",
+      name: "Air Algérie (AH)",
+      flightPrefix: "Uçuş Numarası (AH)",
+      briefing: "İkram almaz. 7T ile başlayan kuyruklar dışındakiler kiralık uçaklardır. Kiralık uçaklarda kaptan kendi yükleme yapsın diye yanına BÜYÜK trip info al. Kiralıklarda Geliş LIR yoksa LDM’e göre LIR hazırla. Kiralıklarda TK Teknik aranmaz. Kiralıklarda LDM ve MVT depart manuel çekilir. Her ikisinde de FM ve CM’den depart edilir."
+    },
+    IRAQI: {
+      code: "IRAQI",
+      name: "Iraqi Airways (IA)",
+      flightPrefix: "Uçuş Numarası (IA)",
+      briefing: "İkram Sancak alır, ekip değişebilir, Loadmaster gelir, CM’den depart edilir."
+    },
+    FLYNAS: {
+      code: "FLYNAS",
+      name: "Flynas (XY)",
+      flightPrefix: "Uçuş Numarası (XY)",
+      briefing: "Kendi LIR’ı var, kontuar kapanınca yolcu hizmetlerinden Weight and Balance almak lazım, kaptan buna göre LIR dolduruyor. Kaptan Loadsheet'i maile atıyor (maile düşmezse yetkiliden isteyebilirsin). Geliş loadsheet iStops'a gelir, gidiş mesajlarının tamamı İkarus'tan çekilir, yetkili gecikmeleri verir."
+    }
+  };
+
+  function buildStepsForAirline(airlineCode) {
+    // 1. ADIM (Havayoluna Göre Özel Belgeler)
+    let step1Items = [];
+    if (airlineCode === "ALGERIE") {
+      step1Items = [
+        { id: "s1_1", label: "Geliş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_2", label: "Gidiş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_3", label: "Ek-10 (2 adet) var mı?", checked: false },
+        { id: "s1_4", label: "Geliş mesajı var mı?", checked: false },
+        { id: "s1_5", label: "Geliş loadsheet var mı?", checked: false },
+        { id: "s1_6", label: "Geliş yükleme var mı? • Kaç adet geliş bagaj var:", checked: false, hasInput: true, inputVal: "", placeholder: "Geliş bagaj sayısı", isArrBagInput: true },
+        { id: "s1_7", label: "Trip info var mı? (Kiralık uçaksa BÜYÜK Trip Info)", checked: false },
+        { id: "s1_8", label: "Gidiş yükleme var mı? • Kaç adet gidiş bagaj var:", checked: false, hasInput: true, inputVal: "", placeholder: "Gidiş bagaj sayısı", isDepBagInput: true }
+      ];
+    } else if (airlineCode === "IRAQI") {
+      step1Items = [
+        { id: "s1_1", label: "Geliş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_2", label: "Gidiş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_3", label: "Ek-10 (2 adet) var mı?", checked: false },
+        { id: "s1_4", label: "Geliş mesajı var mı?", checked: false },
+        { id: "s1_5", label: "Geliş loadsheet var mı?", checked: false },
+        { id: "s1_6", label: "Geliş yükleme var mı?", checked: false },
+        { id: "s1_7", label: "Büyük Trip info var mı?", checked: false },
+        { id: "s1_8", label: "Yolcu manifestosu var mı?", checked: false }
+      ];
+    } else {
+      // FLYNAS
+      step1Items = [
+        { id: "s1_1", label: "Geliş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_2", label: "Gidiş gümrük dilekçesi var mı?", checked: false },
+        { id: "s1_3", label: "Ek-10 (2 adet) var mı?", checked: false },
+        { id: "s1_4", label: "Geliş mesajı var mı?", checked: false },
+        { id: "s1_5", label: "Geliş loadsheet var mı? (iStops’tan)", checked: false },
+        { id: "s1_5b", label: "↳ Manual offload instruction doldur.", checked: false },
+        { id: "s1_6", label: "Geliş yükleme var mı?", checked: false },
+        { id: "s1_7", label: "LIR 3 kopya var mı?", checked: false },
+        { id: "s1_8", label: "Yolcu manifestosu var mı?", checked: false },
+        { id: "s1_9", label: "↳ Kargo varsa gruba manifestoyu yolla. Yolladın mı?", checked: false }
+      ];
+    }
+
+    const common1to6 = [
+      { num: 1, title: "Belgeleri yanına aldığına emin ol.", items: step1Items },
+      {
+        num: 2,
+        title: "Yanında alınacak ekipmanlar",
+        items: [
+          { id: "s2_1", label: "Headset var mı?", checked: false },
+          { id: "s2_2", label: "Bypass pin var mı?", checked: false },
+          { id: "s2_3", label: "Eldiven var mı?", checked: false },
+          { id: "s2_4", label: "Kulaklık var mı?", checked: false },
+          { id: "s2_5", label: "Marshall çubuğu var mı?", checked: false }
+        ]
+      },
+      {
+        num: 3,
+        title: "Flight radardan uçak gelmeden 15-20 dakika öncesinden şutaltında ol.",
+        items: [
+          { id: "s3_1", label: "Saat kaçta uçak altındaydın:", checked: false, hasTime: true, time: "" }
+        ]
+      },
+      {
+        num: 4,
+        title: "Şut altındaki ekipmanlara bak",
+        isStep4Equipment: true,
+        bodyType: "NARROW", // "NARROW" (6 takoz) veya "WIDE" (8 takoz)
+        totalBag: "",
+        akeCountVal: "0",
+        items: [
+          { id: "s4_1", label: "Takoz sayısı minimum 6 adet var mı? (Dar Gövde: Min 6 / Geniş: Min 8)", isChockItem: true, checked: false },
+          { id: "s4_2", label: "Duba sayısı minimum 6 adet var mı?", checked: false },
+          { id: "s4_3", label: "Dolly sayısı ((Toplam Bagaj/30)+1) var mı?", calcType: "dolly", checked: false },
+          { id: "s4_4", label: "Ramp çalışan sayısı ((Toplam Bagaj/60)+1) var mı?", calcType: "worker", checked: false },
+          { id: "s4_5", label: "Boş AKE sayısı ((Toplam Bagaj/30)+1) var mı?", calcType: "ake", checked: false },
+          { id: "s4_6", label: "Eğer AKE değeri > 0 ise Highloader var mı?", isHighloaderItem: true, checked: false },
+          { id: "s4_7", label: "Merdiven sayısı 2 adet var mı?", checked: false }
+        ]
+      },
+      { num: 5, title: "FOD yap", items: [{ id: "s5_1", label: "Yaptın mı?", checked: false }] },
+      { num: 6, title: "Postabaşı / tim lideri ile briefing yap. Boşaltma ve yükleme ile ilgili mutabık kal.", items: [{ id: "s6_1", label: "Yaptın mı?", checked: false }] }
+    ];
+
+    // 7 - 16 ARASI ADIMLAR (Algérie'de İkram yok ve 13. adım Not Commune yolcu; Iraqi ve Flynas'ta 8. adım İkram ve 16. adımda İkram saati var)
+    let steps7to16 = [];
+    const cockpitScripts = [
+      "🗣️ <strong>Kaptana:</strong> \"Ground to Captain, Welcome to İstanbul.\"",
+      "⏳ <strong>Takozlar sürüyorsa:</strong> \"Please stand by on the parking brakes. Chocks are still on.\"",
+      "✅ <strong>Takozlar atıldıysa:</strong> \"You may release the break.\"",
+      "⚠️ <strong>Fren bırakmak istemezse:</strong> \"Sir just to reminder, If you dont want to release the brakes, you are obligated to set the brakes during the whole operation.\"",
+      "❄️ <strong>Sor:</strong> \"Do you need ACU?\""
+    ];
+
+    if (airlineCode === "ALGERIE") {
+      steps7to16 = [
+        {
+          num: 7,
+          title: "TK Teknik’e yakıt için uçağın frekansta olduğunu haber ver. (Kiralık uçaklarda TK Teknik aranmaz)",
+          items: [{ id: "s7_1", label: "TK Teknik’e haber verme saati:", checked: false, hasTime: true, time: "" }]
+        },
+        {
+          num: 8,
+          title: "Ekran çalışıyor mu? Çalışmıyorsa Marshalling yap.",
+          items: [{ id: "s8_1", label: "Kontrol edildi / Marshalling yapıldı", checked: false }]
+        },
+        {
+          num: 9,
+          title: "Uçak geldi. Emniyetli olunca ramp çalışanlarına takoz at işareti yap. Headsetle kaptana bağlan.",
+          scripts: cockpitScripts,
+          items: [
+            { id: "s9_1", label: "Kaptanla konuşuldu & takoz tamam", checked: false },
+            { id: "s9_2", label: "ACU istiyor mu?", checked: false, hasInput: true, inputVal: "", placeholder: "Evet / Hayır" }
+          ]
+        },
+        {
+          num: 10,
+          title: "Kapıya bak eğer kapıda bir sorun yoksa körüğe onay ver. ACU isteniyorsa ACU işareti yap.",
+          items: [{ id: "s10_1", label: "Yaptın mı? AA Saati:", checked: false, hasTime: true, time: "" }]
+        },
+        {
+          num: 11,
+          title: "Body Check yap. Sorun varsa şefe ve kaptana bilgi vermen lazım.",
+          items: [{ id: "s11_1", label: "Yaptın mı?", checked: false }]
+        },
+        {
+          num: 12,
+          title: "Körüğe çık. Gendeck ve manifestoyu al.",
+          items: [
+            { id: "s12_1", label: "Gendeck", checked: false },
+            { id: "s12_2", label: "Manifesto", checked: false }
+          ]
+        },
+        {
+          num: 13,
+          title: "Not commune yolcu varsa transfer deske haber ver.",
+          items: [{ id: "s13_1", label: "Verdin mi?", checked: false }]
+        },
+        {
+          num: 14,
+          title: "Kabine veya teknik ekibe su ve WC isterler mi diye sor? İsterlerse;",
+          items: [
+            { id: "s14_1", label: "İGA Suyu ara.", checked: false },
+            { id: "s14_2", label: "Gruba rampkordineyi etiketleyerek 'su ikaz edildi wc ister' yaz.", checked: false }
+          ]
+        },
+        {
+          num: 15,
+          title: "İkarus'tan geliş mesajı çek.",
+          items: [{ id: "s15_1", label: "Çektin mi?", checked: false }]
+        },
+        {
+          num: 16,
+          title: "Deboarding bittiyse temizliğe haber ver.",
+          items: [{ id: "s16_1", label: "Temizlik başladı (Temizlik saati):", checked: false, hasTime: true, time: "" }]
+        }
+      ];
+    } else {
+      // IRAQI AIRWAYS & FLYNAS
+      const step8Title = airlineCode === "IRAQI"
+        ? "Sancak’a uçağın frekansta olduğunu haber ver."
+        : "DoCo veya Sancak’a uçağın frekansta olduğunu haber ver.";
+
+      steps7to16 = [
+        {
+          num: 7,
+          title: "TK Teknik veya IGA Socar’a yakıt için uçağın frekansta olduğunu haber ver.",
+          items: [{ id: "s7_1", label: "Yakıt haber verme saati:", checked: false, hasTime: true, time: "" }]
+        },
+        {
+          num: 8,
+          title: step8Title,
+          items: [{ id: "s8_1", label: "Sancak’a haber verme saati:", checked: false, hasTime: true, time: "" }]
+        },
+        {
+          num: 9,
+          title: "Ekran çalışıyor mu? Çalışmıyorsa Marshalling yap.",
+          items: [{ id: "s9_1", label: "Kontrol edildi / Marshalling yapıldı", checked: false }]
+        },
+        {
+          num: 10,
+          title: "Uçak geldi. Emniyetli olunca ramp çalışanlarına takoz at işareti yap. Headsetle kaptana bağlan.",
+          scripts: cockpitScripts,
+          items: [
+            { id: "s10_1", label: "Kaptanla konuşuldu & takoz tamam", checked: false },
+            { id: "s10_2", label: "ACU istiyor mu?", checked: false, hasInput: true, inputVal: "", placeholder: "Evet / Hayır" }
+          ]
+        },
+        {
+          num: 11,
+          title: "Kapıya bak eğer kapıda bir sorun yoksa körüğe onay ver. ACU isteniyorsa ACU işareti yap.",
+          items: [{ id: "s11_1", label: "Yaptın mı? AA Saati:", checked: false, hasTime: true, time: "" }]
+        },
+        {
+          num: 12,
+          title: "Body Check yap. Sorun varsa şefe ve kaptana bilgi vermen lazım.",
+          items: [{ id: "s12_1", label: "Yaptın mı?", checked: false }]
+        },
+        {
+          num: 13,
+          title: "Körüğe çık. Gendeck ve manifestoyu al.",
+          items: [
+            { id: "s13_1", label: "Gendeck", checked: false },
+            { id: "s13_2", label: "Manifesto", checked: false }
+          ]
+        },
+        {
+          num: 14,
+          title: "Kabine veya teknik ekibe su ve WC isterler mi diye sor? İsterlerse;",
+          items: [
+            { id: "s14_1", label: "İGA Suyu ara.", checked: false },
+            { id: "s14_2", label: "Gruba rampkordineyi etiketleyerek 'su ister' yaz.", checked: false }
+          ]
+        },
+        {
+          num: 15,
+          title: "İkarus'tan geliş mesajı çek.",
+          items: [{ id: "s15_1", label: "Çektin mi?", checked: false }]
+        },
+        {
+          num: 16,
+          title: "Deboarding bittiyse temizliğe haber ver.",
+          items: [
+            { id: "s16_1", label: "Temizlik başladı. Temizlik başlama saati:", checked: false, hasTime: true, time: "" },
+            { id: "s16_2", label: "İkram başladı. İkram başlama saati:", checked: false, hasTime: true, time: "" }
+          ]
+        }
+      ];
+    }
+
+    const common17to43 = [
+      { num: 17, title: "Kaptandan trip info al.", items: [{ id: "s17_1", label: "Aldın mı?", checked: false }] },
+      { num: 18, title: "Kaptandan yakıt miktarını al final mi diye sor.", items: [{ id: "s18_1", label: "Aldın mı? (Miktarı yaz):", checked: false, hasInput: true, inputVal: "", placeholder: "Örn: 8500 Final" }] },
+      { num: 19, title: "Yakıtı yakıtçıya haber ver.", items: [{ id: "s19_1", label: "Verdin mi?", checked: false }] },
+      { num: 20, title: "Uçak altında boşaltma bitti mi kontrol et.", items: [{ id: "s20_1", label: "Kontrol ettin mi?", checked: false }] },
+      {
+        num: 21,
+        title: "Boşaltma bitti. Holdları kontrol et Microsoft Apps'e yükle. Sorun varsa kaptana ve şefe haber ver.",
+        items: [
+          { id: "s21_1", label: "Kontrol ettin mi?", checked: false },
+          { id: "s21_2", label: "Sorun var mı?", checked: false, hasInput: true, inputVal: "", placeholder: "Sorun yok / Not" }
+        ]
+      },
+      {
+        num: 22,
+        title: "Uçak altına adet sayısını sor.",
+        isStep22BagCheck: true,
+        items: [
+          { id: "s22_1", label: "Kaç Adet:", checked: false, hasInput: true, inputVal: "", placeholder: "Sayı gir" },
+          { id: "s22_2", label: "Adet sayısı giriş LIR'ıyla uyuşuyor mu?", isBagMatchItem: true, checked: false }
+        ]
+      },
+      { num: 23, title: "Ekipmanlar güvenliğini kontrol et.", items: [{ id: "s23_1", label: "Kontrol ettin mi?", checked: false }] },
+      { num: 24, title: "Su ve WC'yi kontrol et; WC’nin suyun bitmesinden sonra bağlandığını kontrol et.", items: [{ id: "s24_1", label: "Kontrol ettin mi?", checked: false }] },
+      { num: 25, title: "Temizlik bittiyse gruba yaz.", items: [{ id: "s25_1", label: "Pb: (Saat gir)", checked: false, hasTime: true, time: "" }] },
+      {
+        num: 26,
+        title: "Yakıt bitti. Yakıtçıdan 3 fiş al. 1 Adet kabin memuruna ver. Yakıtın bittiğini gruba yaz. Kabin memuruna “Can we start Boarding?” diye sor. Eğer okeyse boarding başlat.",
+        scripts: ["🗣️ <strong>Kabin Memuruna:</strong> \"Can we start Boarding?\""],
+        items: [
+          { id: "s26_1", label: "3 fiş aldın mı?", checked: false },
+          { id: "s26_2", label: "Kabin memuruna fişi verdin mi?", checked: false },
+          { id: "s26_3", label: "Boarding başlattın mı? (Saat gir)", checked: false, hasTime: true, time: "" }
+        ]
+      },
+      {
+        num: 27,
+        title: "YHM’den wheelchair, bebek arabası bilgisini al. Kaç yolcudan kaçı boarding yaptığını sor. Boarding bitmesi ne kadar sürer diye sor.",
+        items: [{ id: "s27_1", label: "Wheelchair, Bebek arabası bilgisi var mı? Kaç adet:", checked: false, hasInput: true, inputVal: "", placeholder: "Adet gir" }]
+      },
+      { num: 28, title: "Altea FM’e gir. Kaptanın verdiği trip infoya göre bilgileri güncelle. Yükleme planını kontrol et. Yakıtı gir.", items: [{ id: "s28_1", label: "Yaptın mı?", checked: false }] },
+      {
+        num: 29,
+        title: "Uçak altına git yüklemeyi kontrol et. Gecikme olacak mı? İkarus’a gir ve güncelle.",
+        items: [
+          { id: "s29_1", label: "Gecikme olacak mı? Olacaksa ETD / EOBT:", checked: false, hasInput: true, inputVal: "", placeholder: "ETD / EOBT yaz" },
+          { id: "s29_2", label: "İkarus'a girdin mi?", checked: false }
+        ]
+      },
+      { num: 30, title: "Gecikme varsa kaptana haber ver.", items: [{ id: "s30_1", label: "Verdin mi?", checked: false }] },
+      {
+        num: 31,
+        title: "Manual, LMC var mı? Varsa Postabaşına haber ver.",
+        items: [
+          { id: "s31_1", label: "Var mı?", checked: false, hasInput: true, inputVal: "", placeholder: "Yok / LMC Detayı" },
+          { id: "s31_2", label: "Haber verdin mi?", checked: false }
+        ]
+      },
+      {
+        num: 32,
+        title: "Boarding bitmeye yakın sistemi aç. Her şeyi kontrol et. Boarding bitince YHM’den sistemi AF etmelerini iste. Loadsheet’i çıkart.",
+        items: [{ id: "s32_1", label: "LOADSHEET’İ aldın mı?", checked: false }]
+      },
+      { num: 33, title: "İGA Körüğü ara 'Hazır' de.", items: [{ id: "s33_1", label: "Yaptın mı?", checked: false }] },
+      { num: 34, title: "Loadsheet’i kaptana ver ve imzalat.", items: [{ id: "s34_1", label: "Yaptın mı?", checked: false, hasTime: true, time: "" }] },
+      {
+        num: 35,
+        title: "Yüklemeyi kontrol et. Bittiyse Ağları kontrol et. Her şey yolundaysa kapakları kapat. Body Check yap.",
+        items: [
+          { id: "s35_1", label: "Kapaklar kapandı mı?", checked: false },
+          { id: "s35_2", label: "Body Check yaptın mı?", checked: false }
+        ]
+      },
+      { num: 36, title: "Kaptana loadingin bittiğini bilgisini ver APU çalıştırmasını söyle.", items: [{ id: "s36_1", label: "Yaptın mı?", checked: false }] },
+      {
+        num: 37,
+        title: "Uçak hazır ise kaptana “I need a clearance for pushback.” de. Kaptan okeyi verirse öndeki takozları almaları için ramp çalışanlarına ya da pushbackçiye söyle. Pushback’e fren işareti yap.",
+        scripts: ["🗣️ <strong>Kaptana:</strong> \"I need a clearance for pushback.\""],
+        items: [
+          { id: "s37_1", label: "Kaptandan okey aldın mı?", checked: false },
+          { id: "s37_2", label: "Pushback başladı mı?", checked: false }
+        ]
+      },
+      {
+        num: 38,
+        title: "Pushback uçağı kaldırınca ramp işçilerine takoz alın işareti yap. Kaptana “You can release the parking break.” de. Kaptan frenleri bırakınca pushback’e fren bırakma işareti yap.",
+        scripts: ["🗣️ <strong>Kaptana:</strong> \"You can release the parking break.\""],
+        items: [
+          { id: "s38_1", label: "Takozlar alındı mı?", checked: false },
+          { id: "s38_2", label: "Pushback hareket ediyor mu? Pushback başlama saati:", checked: false, hasTime: true, time: "" }
+        ]
+      },
+      { num: 39, title: "Kaptandan yön bilgisi al pushbackçiye kendi burnunu göstererek uçağın burnu ve yönünü göster.", items: [{ id: "s39_1", label: "Yaptın mı?", checked: false }] },
+      {
+        num: 40,
+        title: "Pushback & Motor Çalıştırma Kuralları",
+        scripts: [
+          "⚠️ Kaptan pushback yerini güncelleyebilir. Pushback’e haber ver.",
+          "⚠️ Kaptan motor çalıştırmak ister, taksi yoluna girmeden izin verme. Pushback’e sor onay verirse izin ver.",
+          "🌧️ Hava yağmurluysa pushback bitmeden izin verme.",
+          "🔧 Uçak motor sırası: Sırtını uçağa verince sol taraf 1, sağ taraf 2."
+        ],
+        items: [{ id: "s40_1", label: "Kontrol edildi / Tamam", checked: false }]
+      },
+      {
+        num: 41,
+        title: "Pushback bitince kaptana pushbackin bittiğini söyle ve frenlerini set etmesini söyle. Fren set edilince pushback’e fren set edildi işareti yap.",
+        items: [{ id: "s41_1", label: "Frenler set edildi & işaret verildi", checked: false }]
+      },
+      {
+        num: 42,
+        title: "Pushback aracı gidince bypass pinini sök ve kaptandan ayrılış onayı al.",
+        scripts: [
+          "🗣️ <strong>Pini sökünce:</strong> \"I took the bypass pin out. I am waiting your confirmation to leave.\"",
+          "🗣️ <strong>Kaptan okey derse:</strong> \"Okey captain, I will be your left/right. Have a nice flight.\""
+        ],
+        items: [{ id: "s42_1", label: "Pin söküldü & kaptanla konuşuldu", checked: false }]
+      },
+      {
+        num: 43,
+        title: "Headseti çıkar. Dışarı yürü. Bypass pinini uçağın gideceği doğrultuda havaya kaldır.",
+        items: [{ id: "s43_1", label: "Bitti mi (Saat gir):", checked: false, hasTime: true, time: "" }]
+      }
+    ];
+
+    return [...common1to6, ...steps7to16, ...common17to43];
+  }
+
+  const defaultAmbars = ["Ambar 1", "Ambar 2", "Ambar 3", "Ambar 4", "Ambar 5"];
+
+  function createDefaultLoading() {
+    return defaultAmbars.map(a => ({
+      cpt: a,
+      mode: "BULK", // Her ambar için ayrı "BULK" veya "AKE"
+      planPcs: "",
+      loadPcs: "",
+      akeCount: "",
+      kg: "",
+      carts: "",
+      akeCodes: ""
+    }));
+  }
+
+  /* UYGULAMA DURUMU (STATE) */
+  let appState = {
+    opId: "op_" + Math.random().toString(36).substring(2, 9),
+    role: "officer", // "officer" veya "admin"
+    roomCode: "CELEBI-LTFM-OPS",
+    officerName: "",
+    airline: "ALGERIE",
+    acModel: "",
+    flightNo: "",
+    acReg: "",
+    standNo: "",
+    updatedAt: "",
+    steps: buildStepsForAirline("ALGERIE"),
+    loading: createDefaultLoading()
+  };
+
+  let tempRole = "officer";
+  let tempSelectedAirline = "ALGERIE";
+  let mqttClient = null;
+  let allOperationsMap = {}; // Admin ekranı için tüm aktif operasyonlar { opId: stateObj }
+
+  function getNowTime() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 5);
+  }
+
+  function initApp() {
+    const saved = localStorage.getItem("harekatMultiOps_v4");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        appState = { ...appState, ...parsed };
+      } catch (e) {}
+    }
+
+    const savedAll = localStorage.getItem("harekatAllOpsCache_v4");
+    if (savedAll) {
+      try { allOperationsMap = JSON.parse(savedAll); } catch (e) {}
+    }
+
+    document.getElementById("acModel").value = appState.acModel || "";
+    document.getElementById("flightNo").value = appState.flightNo || "";
+    document.getElementById("acReg").value = appState.acReg || "";
+    document.getElementById("standNo").value = appState.standNo || "";
+
+    if (!appState.officerName && appState.role === "officer") {
+      openSetupModal();
+    } else {
+      applyRoleView();
+    }
+
+    connectLiveSync();
+    renderSteps();
+  }
+
+  /* =========================================================================
+     CANLI SENKRONİZASYON (MQTT WEBSOCKET + LOCAL BROADCAST)
+     Farklı telefonlardan giren tüm memurları Admin ekranında canlı toplar
+     ========================================================================= */
+  function connectLiveSync() {
+    const room = (appState.roomCode || "CELEBI-LTFM-OPS").trim().toUpperCase();
+    const baseTopic = `celebi_harekat_live_2026/${room}`;
+
+    if (mqttClient) {
+      try { mqttClient.end(); } catch (e) {}
+    }
+
+    try {
+      mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+        clientId: "hrk_" + Math.random().toString(16).slice(2, 10),
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 4000
+      });
+
+      mqttClient.on("connect", () => {
+        document.getElementById("syncDot").classList.add("online");
+        document.getElementById("syncText").innerText = `Canlı Ağ Aktif (${room})`;
+        mqttClient.subscribe(`${baseTopic}/+`, { qos: 0 });
+        if (appState.officerName) broadcastMyState();
+      });
+
+      mqttClient.on("message", (topic, payload) => {
+        const opIdKey = topic.split("/").pop();
+        const str = payload.toString();
+        if (!str) {
+          delete allOperationsMap[opIdKey];
+        } else {
+          try {
+            const data = JSON.parse(str);
+            if (data && data.opId) {
+              allOperationsMap[data.opId] = data;
+            }
+          } catch (e) {}
+        }
+        localStorage.setItem("harekatAllOpsCache_v4", JSON.stringify(allOperationsMap));
+        if (appState.role === "admin") renderAdminDashboard();
+      });
+
+      mqttClient.on("offline", () => {
+        document.getElementById("syncDot").classList.remove("online");
+        document.getElementById("syncText").innerText = "Çevrimdışı (Cihaz İçi Kayıt)";
+      });
+    } catch (err) {
+      console.warn("MQTT bağlantı hatası:", err);
+    }
+  }
+
+  function broadcastMyState() {
+    if (!appState.officerName) return;
+    appState.updatedAt = getNowTime();
+    allOperationsMap[appState.opId] = JSON.parse(JSON.stringify(appState));
+    localStorage.setItem("harekatAllOpsCache_v4", JSON.stringify(allOperationsMap));
+
+    if (mqttClient && mqttClient.connected) {
+      const room = (appState.roomCode || "CELEBI-LTFM-OPS").trim().toUpperCase();
+      const topic = `celebi_harekat_live_2026/${room}/${appState.opId}`;
+      mqttClient.publish(topic, JSON.stringify(appState), { qos: 0, retain: true });
+    }
+  }
+
+  /* =========================================================================
+     GİRİŞ MODALI VE ROL YÖNETİMİ
+     ========================================================================= */
+  function openSetupModal() {
+    tempRole = appState.role || "officer";
+    tempSelectedAirline = appState.airline || "ALGERIE";
+    document.getElementById("inputOfficerName").value = appState.officerName || "";
+    document.getElementById("inputRoomCode").value = appState.roomCode || "CELEBI-LTFM-OPS";
+    switchRoleTab(tempRole);
+    renderAirlineSelector();
+    document.getElementById("setupModal").style.display = "flex";
+  }
+
+  function switchRoleTab(role) {
+    tempRole = role;
+    document.getElementById("tabRoleOfficer").classList.toggle("active", role === "officer");
+    document.getElementById("tabRoleAdmin").classList.toggle("active", role === "admin");
+    document.getElementById("officerFormSection").style.display = role === "officer" ? "block" : "none";
+    document.getElementById("adminFormSection").style.display = role === "admin" ? "block" : "none";
+  }
+
+  function renderAirlineSelector() {
+    const grid = document.getElementById("airlineSelectorGrid");
+    grid.innerHTML = "";
+    Object.values(AIRLINES).forEach(air => {
+      const div = document.createElement("div");
+      div.className = "airline-option " + (tempSelectedAirline === air.code ? "selected" : "");
+      div.innerText = air.name;
+      div.onclick = () => {
+        tempSelectedAirline = air.code;
+        renderAirlineSelector();
+      };
+      grid.appendChild(div);
+    });
+  }
+
+  function confirmSetup() {
+    const roomVal = document.getElementById("inputRoomCode").value.trim().toUpperCase() || "CELEBI-LTFM-OPS";
+    const roomChanged = appState.roomCode !== roomVal;
+    appState.roomCode = roomVal;
+
+    if (tempRole === "admin") {
+      const pin = document.getElementById("inputAdminPin").value.trim();
+      if (pin !== "1234") {
+        alert("Hatalı Admin Şifresi! (Varsayılan şifre: 1234)");
+        return;
+      }
+      appState.role = "admin";
+      document.getElementById("setupModal").style.display = "none";
+      if (roomChanged) connectLiveSync();
+      saveState();
+      applyRoleView();
+      return;
+    }
+
+    const nameVal = document.getElementById("inputOfficerName").value.trim();
+    if (!nameVal) {
+      alert("Lütfen Harekat Memuru adını giriniz!");
+      return;
+    }
+
+    const airlineChanged = appState.airline !== tempSelectedAirline;
+    appState.role = "officer";
+    appState.officerName = nameVal;
+    appState.airline = tempSelectedAirline;
+
+    if (airlineChanged || !appState.steps || !appState.steps.length) {
+      appState.steps = buildStepsForAirline(appState.airline);
+    }
+
+    document.getElementById("setupModal").style.display = "none";
+    if (roomChanged) connectLiveSync();
+    saveState();
+    applyRoleView();
+    renderSteps();
+  }
+
+  function applyRoleView() {
+    const isAdmin = appState.role === "admin";
+    document.getElementById("officerWorkspace").style.display = isAdmin ? "none" : "block";
+    document.getElementById("officerHeaderControls").style.display = isAdmin ? "none" : "block";
+    document.getElementById("adminWorkspace").style.display = isAdmin ? "block" : "none";
+
+    if (isAdmin) {
+      document.getElementById("officerBadge").innerText = `🖥️ ADMIN MODU | İstasyon: ${appState.roomCode} (Değiştir)`;
+      renderAdminDashboard();
+    } else {
+      const airObj = AIRLINES[appState.airline] || AIRLINES.ALGERIE;
+      document.getElementById("officerBadge").innerText = `👤 ${appState.officerName} | ✈️ ${airObj.name} (Değiştir)`;
+      document.getElementById("lblFlightNo").innerText = airObj.flightPrefix;
+      document.getElementById("airlineBriefBanner").innerHTML = `<strong>📌 ${airObj.name} Operasyon Kuralları</strong>${airObj.briefing}`;
+      checkAlgerieTailRule();
+      updateHeaderBadge();
+    }
+  }
+
+  function switchRoleToAdminQuick() {
+    appState.role = "admin";
+    saveState();
+    applyRoleView();
+  }
+
+  function switchBackToOfficer() {
+    if (!appState.officerName) {
+      openSetupModal();
+      switchRoleTab("officer");
+      return;
+    }
+    appState.role = "officer";
+    saveState();
+    applyRoleView();
+  }
+
+  /* ALGERIE 7T KİRALIK KUYRUK KONTROLÜ */
+  function checkAlgerieTailRule() {
+    const leaseAlert = document.getElementById("algerieLeaseAlert");
+    const ownOk = document.getElementById("algerieOwnOk");
+    if (appState.airline !== "ALGERIE" || !appState.acReg) {
+      leaseAlert.style.display = "none";
+      ownOk.style.display = "none";
+      return;
+    }
+    const cleanReg = appState.acReg.replace(/[^A-Z0-9]/g, "");
+    if (cleanReg.startsWith("7T")) {
+      leaseAlert.style.display = "none";
+      ownOk.style.display = "block";
+    } else {
+      leaseAlert.style.display = "block";
+      ownOk.style.display = "none";
+    }
+  }
+
+  function saveHeader() {
+    appState.acModel = document.getElementById("acModel").value.toUpperCase();
+    appState.flightNo = document.getElementById("flightNo").value.toUpperCase();
+    appState.acReg = document.getElementById("acReg").value.toUpperCase();
+    appState.standNo = document.getElementById("standNo").value.toUpperCase();
+    checkAlgerieTailRule();
+    updateHeaderBadge();
+    saveState();
+  }
+
+  function updateHeaderBadge() {
+    const m = appState.acModel || "-";
+    const f = appState.flightNo || "-";
+    const r = appState.acReg || "-";
+    const s = appState.standNo || "-";
+    document.getElementById("flightSummaryBadge").innerText = `${f} | ${r} (${m}) | Poz: ${s}`;
+  }
+
+  function saveState() {
+    localStorage.setItem("harekatMultiOps_v4", JSON.stringify(appState));
+    updateProgress();
+    broadcastMyState();
+  }
+
+  /* =========================================================================
+     29. ADIM: 5 AMBAR BAĞIMSIZ BULK / AKE TABLOSU
+     ========================================================================= */
+  function buildLoadingPanelHtml() {
+    const rowsHtml = appState.loading.map((row, idx) => {
+      const isBulk = row.mode === "BULK";
+
+      const fieldsHtml = isBulk ? `
+        <div class="ambar-nums-grid">
+          <div class="num-field">
+            <label>Yüklenecek (Bagaj)</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.planPcs}" oninput="updateLoadCpt(${idx}, 'planPcs', this.value)">
+          </div>
+          <div class="num-field">
+            <label>Yüklenen BULK</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.loadPcs}" oninput="updateLoadCpt(${idx}, 'loadPcs', this.value)">
+          </div>
+          <div class="num-field">
+            <label>Ağırlık (Kg)</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.kg}" oninput="updateLoadCpt(${idx}, 'kg', this.value)">
+          </div>
+        </div>
+        <div class="ambar-text-row">
+          <label>🛒 Hangi Arabadan Yüklendi? (Araba / Dolly No):</label>
+          <input type="text" placeholder="Örn: Araba 12, Araba 18, BT..." value="${row.carts || ''}" oninput="updateLoadCpt(${idx}, 'carts', this.value)">
+        </div>
+      ` : `
+        <div class="ambar-nums-grid ake-grid">
+          <div class="num-field">
+            <label>Kaç AKE?</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.akeCount || ''}" oninput="updateLoadCpt(${idx}, 'akeCount', this.value)">
+          </div>
+          <div class="num-field">
+            <label>Yüklenecek (Bag)</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.planPcs}" oninput="updateLoadCpt(${idx}, 'planPcs', this.value)">
+          </div>
+          <div class="num-field">
+            <label>Yüklenen (Bag)</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.loadPcs}" oninput="updateLoadCpt(${idx}, 'loadPcs', this.value)">
+          </div>
+          <div class="num-field">
+            <label>Ağırlık (Kg)</label>
+            <input type="number" inputmode="numeric" placeholder="0" value="${row.kg}" oninput="updateLoadCpt(${idx}, 'kg', this.value)">
+          </div>
+        </div>
+        <div class="ambar-text-row">
+          <label>📦 Hangi AKE Yüklendi? (AKE Numaraları):</label>
+          <input type="text" placeholder="Örn: AKE 12345, AKE 67890..." value="${row.akeCodes || ''}" oninput="updateLoadCpt(${idx}, 'akeCodes', this.value)">
+        </div>
+      `;
+
+      return `
+        <div class="ambar-box" id="ambarBox_${idx}">
+          <div class="ambar-top-row">
+            <span class="ambar-title">${row.cpt}</span>
+            <div class="cpt-mode-toggle">
+              <button type="button" class="cpt-mode-btn ${isBulk ? 'active-bulk' : ''}" onclick="setCptMode(${idx}, 'BULK')">🛒 BULK</button>
+              <button type="button" class="cpt-mode-btn ${!isBulk ? 'active-ake' : ''}" onclick="setCptMode(${idx}, 'AKE')">📦 AKE</button>
+            </div>
+            <span class="status-pill" id="ambarStatus_${idx}">Boş</span>
+          </div>
+          ${fieldsHtml}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="loading-panel" id="embeddedLoadingPanel">
+        <span class="loading-panel-title">📤 29. Adım: 5 Ambar Yükleme Tablosu (Her Ambar Ayrı BULK / AKE)</span>
+        ${rowsHtml}
+        <div class="loading-totals-card">
+          <div class="totals-grid">
+            <div class="tot-item bulk-tot">
+              <span>🛒 TOPLAM YÜKLENEN BULK</span>
+              <strong id="totBulkSummary">0 Adet (0 kg)</strong>
+            </div>
+            <div class="tot-item ake-tot">
+              <span>📦 TOPLAM YÜKLENEN AKE</span>
+              <strong id="totAkeSummary">0 AKE | 0 Bagaj (0 kg)</strong>
+            </div>
+          </div>
+          <div class="grand-total-bar">
+            <span id="grandPlanVsLoad">Toplam Bagaj: 0 / 0 Adet</span>
+            <span id="grandTotalKg">0 kg</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function setCptMode(idx, mode) {
+    appState.loading[idx].mode = mode;
+    saveState();
+    renderSteps();
+  }
+
+  function updateLoadCpt(idx, field, val) {
+    appState.loading[idx][field] = val;
+    saveState();
+    refreshLoadTotalsAndStatus();
+  }
+
+  function getLoadingTotals(loadingArr) {
+    let bulkPcs = 0, bulkKg = 0;
+    let akeUnits = 0, akeBagPcs = 0, akeKg = 0;
+    let totPlan = 0, totLoad = 0, totKg = 0;
+
+    (loadingArr || []).forEach(r => {
+      const p = parseInt(r.planPcs) || 0;
+      const l = parseInt(r.loadPcs) || 0;
+      const k = parseInt(r.kg) || 0;
+      const aCnt = parseInt(r.akeCount) || 0;
+      totPlan += p;
+      totLoad += l;
+      totKg += k;
+      if (r.mode === "BULK") {
+        bulkPcs += l;
+        bulkKg += k;
+      } else {
+        akeUnits += aCnt;
+        akeBagPcs += l;
+        akeKg += k;
+      }
+    });
+    return { bulkPcs, bulkKg, akeUnits, akeBagPcs, akeKg, totPlan, totLoad, totKg };
+  }
+
+  function refreshLoadTotalsAndStatus() {
+    const t = getLoadingTotals(appState.loading);
+
+    appState.loading.forEach((r, idx) => {
+      const p = parseInt(r.planPcs) || 0;
+      const l = parseInt(r.loadPcs) || 0;
+      const akeCnt = parseInt(r.akeCount) || 0;
+      const box = document.getElementById(`ambarBox_${idx}`);
+      const pill = document.getElementById(`ambarStatus_${idx}`);
+      if (!box || !pill) return;
+
+      box.classList.remove("match-ok", "match-diff");
+      pill.classList.remove("ok", "diff");
+
+      if (r.planPcs === "" && r.loadPcs === "" && (!r.akeCount || r.akeCount === "")) {
+        pill.innerText = "Boş";
+      } else if (p === l && (p > 0 || l > 0)) {
+        box.classList.add("match-ok");
+        pill.classList.add("ok");
+        pill.innerText = r.mode === "AKE" ? `✅ ${akeCnt} AKE (${l}/${p})` : `✅ Tamam (${l}/${p})`;
+      } else {
+        box.classList.add("match-diff");
+        pill.classList.add("diff");
+        const diff = l - p;
+        pill.innerText = `⚠️ ${l}/${p} (${diff > 0 ? '+' + diff : diff})`;
+      }
+    });
+
+    const elBulk = document.getElementById("totBulkSummary");
+    const elAke = document.getElementById("totAkeSummary");
+    const elGrand = document.getElementById("grandPlanVsLoad");
+    const elGrandKg = document.getElementById("grandTotalKg");
+
+    if (elBulk) elBulk.innerText = `${t.bulkPcs} Adet (${t.bulkKg} kg)`;
+    if (elAke) elAke.innerText = `${t.akeUnits} AKE | ${t.akeBagPcs} Bagaj (${t.akeKg} kg)`;
+    if (elGrand) elGrand.innerText = `Toplam Bagaj: ${t.totLoad} / ${t.totPlan} Adet`;
+    if (elGrandKg) elGrandKg.innerText = `${t.totKg} kg`;
+  }
+
+  /* =========================================================================
+     43 ADIM CHECKLIST RENDER VE 4. ADIM / 22. ADIM DİNAMİK KURALLARI
+     ========================================================================= */
+  function getStep1BagCounts() {
+    let arrBag = "-", depBag = "-";
+    const step1 = appState.steps[0];
+    if (step1 && step1.items) {
+      step1.items.forEach(it => {
+        if (it.isArrBagInput && it.inputVal) arrBag = it.inputVal;
+        if (it.isDepBagInput && it.inputVal) depBag = it.inputVal;
+      });
+    }
+    return { arrBag, depBag };
+  }
+
+  function renderSteps() {
+    const container = document.getElementById("stepsContainer");
+    container.innerHTML = "";
+    const { arrBag, depBag } = getStep1BagCounts();
+
+    appState.steps.forEach((step, sIdx) => {
+      // 4. Adımda AKE = 0 ise Highloader maddesi gizlendiği için tamamlanma hesabında dikkate alma
+      const activeItems = step.items.filter(it => {
+        if (it.isHighloaderItem && (parseInt(step.akeCountVal) || 0) <= 0) return false;
+        return true;
+      });
+      const allChecked = activeItems.every(i => i.checked);
+
+      const card = document.createElement("div");
+      card.className = "step-card " + (allChecked ? "completed" : "");
+
+      let scriptsHtml = "";
+      if (step.scripts && step.scripts.length) {
+        scriptsHtml = step.scripts.map(sc => `<div class="script-box">${sc}</div>`).join("");
+      }
+
+      // 4. ADIM ÖZEL PANEL (Dar/Geniş Gövde Seçimi + Toplam Bagaj & Boş AKE Sayısı)
+      let step4TopHtml = "";
+      const bagCount = parseInt(step.totalBag) || 0;
+      const dollyNeed = step.totalBag !== "" ? Math.floor(bagCount / 30) + 1 : "?";
+      const workerNeed = step.totalBag !== "" ? Math.floor(bagCount / 60) + 1 : "?";
+      const akeCalcNeed = step.totalBag !== "" ? Math.floor(bagCount / 30) + 1 : 0;
+      const currentAkeVal = parseInt(step.akeCountVal) || 0;
+
+      if (step.isStep4Equipment) {
+        const isWide = step.bodyType === "WIDE";
+        step4TopHtml = `
+          <div class="body-type-toggle">
+            <button type="button" class="body-btn ${!isWide ? 'active' : ''}" onclick="setStep4BodyType(${sIdx}, 'NARROW')">✈️ Dar Gövde (Min 6 Takoz)</button>
+            <button type="button" class="body-btn ${isWide ? 'active' : ''}" onclick="setStep4BodyType(${sIdx}, 'WIDE')">🛫 Geniş Gövde (Min 8 Takoz)</button>
+          </div>
+          <div class="sub-item" style="background:#0f172a; border-color:var(--accent); margin-bottom:6px;">
+            <span style="font-size:0.82rem; font-weight:700; color:var(--accent);">🎒 Toplam Bagaj Sayısı Gir:</span>
+            <input type="number" inputmode="numeric" class="inline-input" placeholder="Bagaj Adet" value="${step.totalBag}" oninput="updateStep4Bag(${sIdx}, this.value)">
+          </div>
+          <div class="sub-item" style="background:#0f172a; border-color:var(--warn); margin-bottom:6px;">
+            <span style="font-size:0.82rem; font-weight:700; color:var(--warn);">📦 Boş AKE Sayısı (0 ise Highloader gizlenir):</span>
+            <input type="number" inputmode="numeric" class="inline-input" placeholder="0" value="${step.akeCountVal}" oninput="updateStep4AkeVal(${sIdx}, this.value)">
+          </div>
+        `;
+      }
+
+      let itemsHtml = step.items.map((item, iIdx) => {
+        // KURAL: Eğer AKE değeri = 0 ise Highloader seçeneğini gösterme!
+        if (item.isHighloaderItem && currentAkeVal <= 0) {
+          return "";
+        }
+
+        let itemLabel = item.label;
+        if (item.isChockItem) {
+          const minChocks = step.bodyType === "WIDE" ? 8 : 6;
+          const bodyText = step.bodyType === "WIDE" ? "Geniş Gövde" : "Dar Gövde";
+          itemLabel = `Takoz sayısı minimum <strong>${minChocks} adet</strong> var mı? (${bodyText})`;
+        }
+
+        if (item.isBagMatchItem && appState.airline === "ALGERIE") {
+          itemLabel = `Adet sayısı giriş LIR'ıyla uyuşuyor mu? <span class="calc-badge">1. Madde Geliş: ${arrBag} | Gidiş: ${depBag}</span>`;
+        }
+
+        let dynamicBadge = "";
+        if (item.calcType === "dolly") dynamicBadge = `<span class="calc-badge" id="badge_dolly">Gereken: ${dollyNeed}</span>`;
+        if (item.calcType === "worker") dynamicBadge = `<span class="calc-badge" id="badge_worker">Gereken: ${workerNeed}</span>`;
+        if (item.calcType === "ake") dynamicBadge = `<span class="calc-badge" id="badge_ake">Formül: ${akeCalcNeed} | Aktif AKE: ${currentAkeVal}</span>`;
+
+        let rightCtrl = "";
+        if (item.hasTime) {
+          rightCtrl = `<input type="time" class="time-input" value="${item.time || ''}" onchange="updateItemTime(${sIdx}, ${iIdx}, this.value)">`;
+        } else if (item.hasInput) {
+          rightCtrl = `<input type="text" class="inline-input" placeholder="${item.placeholder || ''}" value="${item.inputVal || ''}" oninput="updateItemInput(${sIdx}, ${iIdx}, this.value)">`;
+        }
+
+        return `
+          <div class="sub-item ${item.checked ? 'checked' : ''}">
+            <label class="sub-left">
+              <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleSubItem(${sIdx}, ${iIdx}, this.checked)">
+              <span class="sub-label">${itemLabel} ${dynamicBadge}</span>
+            </label>
+            ${rightCtrl}
+          </div>
+        `;
+      }).join("");
+
+      card.innerHTML = `
+        <div class="step-header">
+          <span class="step-num">${step.num}</span>
+          <div class="step-title">${step.title}</div>
+        </div>
+        ${scriptsHtml}
+        ${step4TopHtml}
+        <div class="sub-list">${itemsHtml}</div>
+      `;
+      container.appendChild(card);
+
+      // 29. Adımın hemen altına 5 Ambarlı Yükleme Tablosunu yerleştir
+      if (step.num === 29) {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = buildLoadingPanelHtml();
+        container.appendChild(wrap.firstElementChild);
+      }
+    });
+
+    refreshLoadTotalsAndStatus();
+    updateProgress();
+  }
+
+  function setStep4BodyType(sIdx, type) {
+    appState.steps[sIdx].bodyType = type;
+    saveState();
+    renderSteps();
+  }
+
+  function updateStep4Bag(sIdx, val) {
+    appState.steps[sIdx].totalBag = val;
+    const bagCount = parseInt(val) || 0;
+    const calcAke = val !== "" ? Math.floor(bagCount / 30) + 1 : 0;
+    // Bagaj girildiğinde AKE sayısını otomatik öner
+    appState.steps[sIdx].akeCountVal = String(calcAke);
+    saveState();
+    renderSteps();
+  }
+
+  function updateStep4AkeVal(sIdx, val) {
+    appState.steps[sIdx].akeCountVal = val;
+    saveState();
+    renderSteps();
+  }
+
+  function toggleSubItem(sIdx, iIdx, isChecked) {
+    const item = appState.steps[sIdx].items[iIdx];
+    item.checked = isChecked;
+    if (item.hasTime && isChecked && !item.time) {
+      item.time = getNowTime();
+    }
+    saveState();
+    renderSteps();
+  }
+
+  function updateItemTime(sIdx, iIdx, val) {
+    const item = appState.steps[sIdx].items[iIdx];
+    item.time = val;
+    if (val && !item.checked) item.checked = true;
+    saveState();
+    renderSteps();
+  }
+
+  function updateItemInput(sIdx, iIdx, val) {
+    const item = appState.steps[sIdx].items[iIdx];
+    item.inputVal = val;
+    if (val && !item.checked) item.checked = true;
+    saveState();
+    // 1. maddedeki bagaj sayısı değiştiyse 22. maddedeki referansı güncelle
+    if (item.isArrBagInput || item.isDepBagInput) {
+      renderSteps();
+    }
+  }
+
+  function jumpToLoadingTable() {
+    const panel = document.getElementById("embeddedLoadingPanel");
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function switchView(view) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function calculateStepProgress(stepsArr) {
+    const total = (stepsArr || []).length || 43;
+    const done = (stepsArr || []).filter(s => {
+      const active = s.items.filter(it => !(it.isHighloaderItem && (parseInt(s.akeCountVal) || 0) <= 0));
+      return active.every(i => i.checked);
+    }).length;
+    const pct = Math.round((done / total) * 100);
+    return { done, total, pct };
+  }
+
+  function updateProgress() {
+    const { done, total, pct } = calculateStepProgress(appState.steps);
+    document.getElementById("progressText").innerText = `İlerleme: ${done} / ${total} Adım (%${pct})`;
+    document.getElementById("progressFill").style.width = pct + "%";
+  }
+
+  /* =========================================================================
+     MESAJLARI VE AMBAR DETAYLARINI PANOYA KOPYALAMA
+     ========================================================================= */
+  function buildReportTextForState(st) {
+    const airObj = AIRLINES[st.airline] || AIRLINES.ALGERIE;
+    let out = `✈️ *HAREKAT OPERASYON RAPORU*\n`;
+    out += `👤 Harekat Memuru: ${st.officerName || "-"}\n`;
+    out += `🏢 Havayolu: ${airObj.name}\n`;
+    out += `🛩️ Model: ${st.acModel || "-"} | Sefer: ${st.flightNo || "-"} | Kuyruk: ${st.acReg || "-"} | Pozisyon: ${st.standNo || "-"}\n\n`;
+
+    out += `⏱️ *SAATLER & GİRİLEN BİLGİLER*\n`;
+    (st.steps || []).forEach(s => {
+      s.items.forEach(i => {
+        if (i.hasTime && i.time) {
+          out += `• [Adım ${s.num}] ${i.label} ${i.time}\n`;
+        }
+        if (i.hasInput && i.inputVal) {
+          out += `• [Adım ${s.num}] ${i.label} ${i.inputVal}\n`;
+        }
+      });
+    });
+
+    const t = getLoadingTotals(st.loading);
+    out += `\n📤 *29. ADIM: AMBAR YÜKLEME DETAYLARI (5 AMBAR)*\n`;
+
+    (st.loading || []).forEach(r => {
+      const p = parseInt(r.planPcs) || 0;
+      const l = parseInt(r.loadPcs) || 0;
+      const k = parseInt(r.kg) || 0;
+      const aCnt = parseInt(r.akeCount) || 0;
+
+      if (r.mode === "BULK") {
+        out += `  • ${r.cpt} [BULK]: Plan ${p} / Yüklenen ${l} Adet (${k} kg) | Arabalar: ${r.carts || "Girilmedi"}\n`;
+      } else {
+        out += `  • ${r.cpt} [AKE]: ${aCnt} Adet AKE | Plan ${p} / Yüklenen ${l} Bagaj (${k} kg) | AKE Kodları: ${r.akeCodes || "Girilmedi"}\n`;
+      }
+    });
+
+    out += `\n📊 *TOPLAM YÜKLEME ÖZETİ*\n`;
+    out += `  🛒 Toplam Yüklenen BULK: ${t.bulkPcs} Adet Bagaj (${t.bulkKg} kg)\n`;
+    out += `  📦 Toplam Yüklenen AKE: ${t.akeUnits} Adet AKE (${t.akeBagPcs} Bagaj / ${t.akeKg} kg)\n`;
+    out += `  ✅ Genel Toplam: ${t.totLoad} / ${t.totPlan} Bagaj (${t.totKg} kg)\n`;
+
+    return out;
+  }
+
+  function copyTurnaroundSummary() {
+    const text = buildReportTextForState(appState);
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Operasyon saatleri, BULK/AKE toplamları ve her ambarın Araba/AKE numaraları panoya kopyalandı!");
+    });
+  }
+
+  function resetCurrentOperation() {
+    if (confirm("Mevcut uçuş sıfırlanıp yeni operasyona geçilsin mi? (Memur adı ve havayolu korunur)")) {
+      appState.opId = "op_" + Math.random().toString(36).substring(2, 9);
+      appState.acModel = "";
+      appState.flightNo = "";
+      appState.acReg = "";
+      appState.standNo = "";
+      appState.steps = buildStepsForAirline(appState.airline);
+      appState.loading = createDefaultLoading();
+
+      document.getElementById("acModel").value = "";
+      document.getElementById("flightNo").value = "";
+      document.getElementById("acReg").value = "";
+      document.getElementById("standNo").value = "";
+
+      checkAlgerieTailRule();
+      updateHeaderBadge();
+      saveState();
+      renderSteps();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  /* =========================================================================
+     ADMIN CANLI İZLEME PANELİ FONKSİYONLARI
+     ========================================================================= */
+  function renderAdminDashboard() {
+    const grid = document.getElementById("adminOpsGrid");
+    const opsList = Object.values(allOperationsMap);
+
+    let totalBulkAll = 0;
+    let totalAkeAll = 0;
+    let sumPct = 0;
+
+    if (opsList.length === 0) {
+      grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:30px; color:var(--muted); background:var(--card); border-radius:10px;">Henüz aktif bir operasyon verisi yok. Memurlar giriş yaptığında burada canlı görünecektir.</div>`;
+    } else {
+      grid.innerHTML = "";
+      opsList.forEach(op => {
+        const prog = calculateStepProgress(op.steps);
+        const loadT = getLoadingTotals(op.loading);
+        totalBulkAll += loadT.bulkPcs;
+        totalAkeAll += loadT.akeUnits;
+        sumPct += prog.pct;
+
+        const airObj = AIRLINES[op.airline] || AIRLINES.ALGERIE;
+
+        // Önemli saatleri ve ambar özetini çıkar
+        const keyLogs = [];
+        (op.steps || []).forEach(s => {
+          s.items.forEach(i => {
+            if (i.hasTime && i.time) keyLogs.push(`<strong>[Adım ${s.num}]</strong> ${i.time}`);
+            if (i.hasInput && i.inputVal) keyLogs.push(`<strong>[Adım ${s.num}]</strong> ${i.inputVal}`);
+          });
+        });
+
+        const ambarLog = (op.loading || [])
+          .filter(r => r.loadPcs || r.akeCount || r.carts || r.akeCodes)
+          .map(r => r.mode === "BULK"
+            ? `${r.cpt}: ${r.loadPcs || 0} BULK (Araba: ${r.carts || "-"})`
+            : `${r.cpt}: ${r.akeCount || 0} AKE [${r.akeCodes || "-"}]`)
+          .join("<br>");
+
+        const card = document.createElement("div");
+        card.className = "op-card";
+        card.innerHTML = `
+          <div class="op-card-top">
+            <strong style="color:var(--accent); font-size:0.92rem;">👤 ${op.officerName || "İsimsiz Memur"}</strong>
+            <span class="op-airline-tag">${airObj.name}</span>
+          </div>
+          <div class="op-meta">
+            <div><strong>Sefer:</strong> ${op.flightNo || "-"}</div>
+            <div><strong>Kuyruk:</strong> ${op.acReg || "-"}</div>
+            <div><strong>Model:</strong> ${op.acModel || "-"}</div>
+            <div><strong>Pozisyon:</strong> ${op.standNo || "-"}</div>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:4px;">
+              <span>İlerleme: ${prog.done}/${prog.total} Adım (%${prog.pct})</span>
+              <span style="color:var(--muted);">Son: ${op.updatedAt || "-"}</span>
+            </div>
+            <div class="progress-bar" style="margin-bottom:4px;">
+              <div class="progress-fill" style="width:${prog.pct}%;"></div>
+            </div>
+          </div>
+          <div class="op-times">
+            <div><strong>📦 Yükleme:</strong> BULK: ${loadT.bulkPcs} Adet | AKE: ${loadT.akeUnits} Adet (${loadT.totKg} kg)</div>
+            ${ambarLog ? `<div style="margin-top:4px; color:#fde68a;">${ambarLog}</div>` : ""}
+            <div style="margin-top:4px;">${keyLogs.length ? keyLogs.join(" • ") : "Henüz saat/veri girilmedi"}</div>
+          </div>
+          <div class="op-actions">
+            <button class="op-btn" style="background:var(--accent); color:#000;" onclick="openAdminDetail('${op.opId}')">🔍 Tüm Detay & Rapor</button>
+            <button class="op-btn" style="background:var(--danger); color:#fff; flex:0.4;" onclick="deleteOpFromAdmin('${op.opId}')">Sil</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    document.getElementById("statActiveOps").innerText = opsList.length;
+    document.getElementById("statAvgProg").innerText = opsList.length ? `%${Math.round(sumPct / opsList.length)}` : "%0";
+    document.getElementById("statTotalBulk").innerText = `${totalBulkAll} Adet`;
+    document.getElementById("statTotalAke").innerText = `${totalAkeAll} AKE`;
+  }
+
+  function openAdminDetail(opId) {
+    const op = allOperationsMap[opId];
+    if (!op) return;
+    document.getElementById("adminDetailTitle").innerText = `${op.officerName} - ${op.flightNo || "Sefer"}`;
+    document.getElementById("adminDetailContent").innerText = buildReportTextForState(op);
+    document.getElementById("adminDetailModal").style.display = "flex";
+  }
+
+  function closeAdminDetail() {
+    document.getElementById("adminDetailModal").style.display = "none";
+  }
+
+  function deleteOpFromAdmin(opId) {
+    if (!confirm("Bu operasyonu Admin ekranından kaldırmak istiyor musunuz?")) return;
+    delete allOperationsMap[opId];
+    localStorage.setItem("harekatAllOpsCache_v4", JSON.stringify(allOperationsMap));
+    if (mqttClient && mqttClient.connected) {
+      const room = (appState.roomCode || "CELEBI-LTFM-OPS").trim().toUpperCase();
+      mqttClient.publish(`celebi_harekat_live_2026/${room}/${opId}`, "", { qos: 0, retain: true });
+    }
+    renderAdminDashboard();
+  }
+
+  initApp();
+</script>
+</body>
+</html>
